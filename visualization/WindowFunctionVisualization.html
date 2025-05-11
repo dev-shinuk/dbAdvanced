@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL 윈도우 함수 시각화</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React 및 ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel - JSX를 변환하기 위해 필요 -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #3B82F6;
+            color: #3B82F6;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-8 text-center">SQL 윈도우 함수 시각화 도구</h1>
+
+        <!-- 탭 네비게이션 -->
+        <div class="flex mb-6">
+            <button id="tab-frame" class="px-4 py-2 tab-active" onclick="switchTab('frame')">프레임 절 시각화</button>
+            <button id="tab-partition" class="px-4 py-2" onclick="switchTab('partition')">PARTITION BY 시각화</button>
+        </div>
+
+        <!-- 컴포넌트 렌더링 영역 -->
+        <div id="frame-visualization" class="component-container"></div>
+        <div id="partition-visualization" class="component-container hidden"></div>
+    </div>
+
+    <!-- 탭 전환 스크립트 -->
+    <script>
+        function switchTab(tabName) {
+            const containers = document.querySelectorAll('.component-container');
+            const tabs = document.querySelectorAll('[id^="tab-"]');
+
+            containers.forEach(container => container.classList.add('hidden'));
+            tabs.forEach(tab => tab.classList.remove('tab-active'));
+
+            document.getElementById(`${tabName}-visualization`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}`).classList.add('tab-active');
+        }
+    </script>
+
+    <!-- 프레임 시각화 컴포넌트 -->
+    <script type="text/babel" src="./WindowFunctionVisualization.jsx"></script>
+
+    <!-- 파티션 시각화 컴포넌트 -->
+    <script type="text/babel" src="./WindowFunctionPartitionVisualization.jsx"></script>
+</body>
+
+</html>
