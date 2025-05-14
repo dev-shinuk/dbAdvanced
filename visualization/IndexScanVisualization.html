@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MySQL InnoDB 데이터베이스의 B+Tree 인덱스 스캔 방식을 시각적으로 보여주는 웹 애플리케이션입니다.">
+  <meta name="keywords" content="MySQL, InnoDB, B+Tree, 인덱스, 데이터베이스, 시각화">
+  <meta name="author" content="DB Advanced">
+  <meta name="theme-color" content="#007bff">
+  <meta property="og:title" content="MySQL InnoDB B+Tree 인덱스 스캔 시각화">
+  <meta property="og:description" content="MySQL InnoDB 데이터베이스의 B+Tree 인덱스 스캔 방식을 시각적으로 보여주는 웹 애플리케이션입니다.">
+  <meta property="og:type" content="website">
+  <link rel="canonical" href="https://sons-wook.github.io/dbAdvanced/visualization/IndexScanVisualization.html">
+  <title>MySQL InnoDB B+Tree 인덱스 스캔 시각화</title>
+  <!-- 파비콘 추가 -->
+  <link rel="icon" type="image/png"
+    href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAf5JREFUWEftl79rFEEUxz9vb1c0IYQQQhAJEkRMrAQLQRAtBLHQSiw0WFhYa2GhRSwsrCwEYWMhKUIQixQWFiJEEAkWIkFCiBBCOO76vNt9Mpd7l1yyuzMbd5vMFPP4/vh+vu/NbVaDqs5hZrPAMvA5hLDT7/cmg85JRFYbjcaiGLnZartNbPB5VxO1Wq0EICLfQwjnS4ALgNPbmVrOtdKGiKgAvgKL7QztzGwD+AC8CyH8GmbQ9l6ZGYCqStJVebYlJ9sws5vAS+ArcK8IEBEpM2sR/QQuh0xYUdWbwGtgFVguAgKMiMjBwUExpBYWFsw7OO5tFkVkq1qtVqrVat/wNpvNCHAvhPDB1+qZpqoXzGxVRC5VKpXKIPDd3d2fwMMQwrp/99KVFe5oBryIyHq9Xl/qBZGZPQWehRC+5QA9lUXO5bl+IDxMIjLdC4KZPQfejQo+0AfyYnYCQTz0Yx9bR5ac0GaveQJ65gXwMoTwcVhAKfl6JcKg0NlqtWbS64TqesNki8BdYAV47rXvAL+HBWRme13reinjwb0Xa57jdeBKEfDtdnveAT8BvoUQzlXMbC5doO11KTsw4xvuBvDaz9lL4MfWUVh5S7HmASrJaEokIgu+4Vq5m6SPzu4ny1wuQ/3WIdaa8vPb+4gnXvt9awH85sTzPPF/xr8B+R3TNDhZ9B4AAAAASUVORK5CYII=">
+  <!-- 모바일 최적화 추가 설정 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 10px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .button-container {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .button {
+      padding: 10px 15px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .active-button {
+      background-color: #007bff;
+      color: white;
+    }
+
+    .inactive-button {
+      background-color: #f0f0f0;
+      color: #333;
+    }
+
+    .visualization-container {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+
+    .info-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f0f8ff;
+      border-radius: 5px;
+      border: 1px solid #b8daff;
+    }
+
+    .tree-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 20px;
+      overflow: auto;
+    }
+
+    .row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 30px;
+      position: relative;
+      width: 100%;
+    }
+
+    .node-container {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      position: relative;
+      width: 100%;
+    }
+
+    .node {
+      padding: 10px 15px;
+      border-radius: 5px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      font-weight: bold;
+      width: 120px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .root-node {
+      background-color: #ffcccc;
+      border: 2px solid #ff9999;
+    }
+
+    .internal-node {
+      background-color: #ffffcc;
+      border: 2px solid #ffff99;
+    }
+
+    .leaf-node {
+      background-color: #ccffcc;
+      border: 2px solid #99cc99;
+    }
+
+    .data-page {
+      background-color: #ccccff;
+      border: 2px solid #9999cc;
+      width: 150px;
+    }
+
+    .connector {
+      position: absolute;
+      width: 2px;
+      background-color: #999;
+      z-index: 1;
+    }
+
+    .horizontal-connector {
+      height: 2px;
+      background-color: #999;
+      position: absolute;
+      z-index: 1;
+    }
+
+    .highlighted-node {
+      box-shadow: 0 0 0 3px #ff6347;
+      animation: pulse 1.5s infinite;
+    }
+
+    .scan-path {
+      border: 2px solid #ff6347;
+      box-shadow: 0 0 8px rgba(255, 99, 71, 0.6);
+    }
+
+    .query-example {
+      padding: 10px;
+      background-color: #f0f0f0;
+      border-left: 4px solid #007bff;
+      font-family: monospace;
+      margin: 10px 0;
+    }
+
+    .complexity-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      background-color: #28a745;
+      color: white;
+      margin-left: 10px;
+    }
+
+    .toggle-examples-btn {
+      margin-left: 10px;
+      padding: 3px 8px;
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.3s;
+    }
+
+    .toggle-examples-btn:hover {
+      background-color: #e0e0e0;
+    }
+
+    .additional-examples {
+      margin-top: 8px;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-left: 4px solid #007bff;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .additional-examples ul {
+      margin: 0;
+      padding-left: 20px;
+      list-style-type: none;
+    }
+
+    .additional-examples li {
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .additional-examples li:before {
+      content: "•";
+      position: absolute;
+      left: -15px;
+      color: #007bff;
+      font-weight: bold;
+    }
+
+    .leaf-connector {
+      height: 2px;
+      background-color: #999;
+      position: absolute;
+    }
+
+    .secondary-index-container {
+      border: 1px dashed #999;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 20px;
+      background-color: #f0f0f0;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 15px;
+      justify-content: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      border: 1px solid #666;
+    }
+
+    /* 모바일 반응형 스타일 */
+    @media (max-width: 768px) {
+      .node {
+        width: 80px;
+        font-size: 12px;
+        padding: 8px;
+      }
+
+      .node-container {
+        gap: 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        /* iOS 부드러운 스크롤 */
+        padding-bottom: 5px;
+      }
+
+      .data-page {
+        width: 100px;
+      }
+
+      .button {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+
+      .button-container {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .button {
+        width: 100%;
+        max-width: 300px;
+        margin: 5px 0;
+      }
+
+      .visualization-container {
+        padding: 10px;
+        overflow-x: auto;
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .info-panel {
+        font-size: 14px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .node {
+        width: 60px;
+        font-size: 10px;
+        padding: 6px;
+      }
+
+      .complexity-badge {
+        display: block;
+        margin: 5px 0;
+        text-align: center;
+      }
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 99, 71, 0.7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(255, 99, 71, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 99, 71, 0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app"></div>
+
+  <script>
+    // 인덱스 스캔 유형 정보
+    const scanTypes = {
+      const: {
+        title: 'Const 스캔 (PK/Unique Key Lookup)',
+        description: 'PK나 Unique 인덱스를 사용하여 단일 레코드에 직접 접근하는 방식입니다. B+Tree를 한 번 순회하여 원하는 레코드를 찾습니다.',
+        complexity: 'O(log N)',
+        example: 'SELECT * FROM film WHERE film_id = 25;',
+        paths: ['root', 'internal', 'leaf', 'data'],
+        additionalExamples: [
+          'SELECT * FROM customer WHERE customer_id = 3;',
+          'SELECT * FROM film WHERE title = \'ACADEMY DINOSAUR\' AND title IS PRIMARY KEY;',
+          'SELECT * FROM rental WHERE rental_id IN (SELECT rental_id FROM payment WHERE payment_id = 10);',
+          'SELECT * FROM actor WHERE actor_id = 23 LIMIT 1;'
+        ]
+      },
+      range: {
+        title: 'Range 스캔 (Index Range Scan)',
+        description: '인덱스에서 특정 범위의 값을 조회하는 방식입니다. 범위의 시작점을 찾고, 리프 노드 간의 링크를 통해 순차적으로 스캔합니다.',
+        complexity: 'O(log N + M) (M: 범위 내 레코드 수)',
+        example: 'SELECT * FROM film WHERE film_id BETWEEN 20 AND 30;',
+        paths: ['root', 'internal', 'leaf', 'leafRange', 'data', 'dataRange'],
+        additionalExamples: [
+          'SELECT * FROM rental WHERE rental_date > \'2005-05-25\' AND rental_date < \'2005-05-30\';',
+          'SELECT * FROM payment WHERE amount >= 5.00 AND amount <= 10.00;',
+          'SELECT * FROM film WHERE rating IN (\'G\', \'PG\') AND length < 90;',
+          'SELECT * FROM customer WHERE last_name LIKE \'A%\';'
+        ]
+      },
+      secondary: {
+        title: '세컨더리 인덱스 스캔 (Extra Lookup)',
+        description: '세컨더리 인덱스에서 조건에 맞는 PK 값을 찾고, 그 PK 값으로 클러스터드 인덱스를 다시 검색하는 2단계 과정입니다.',
+        complexity: 'O(log N + K*log N) (K: 결과 행 수)',
+        example: 'SELECT * FROM film WHERE title = \'ACADEMY DINOSAUR\';',
+        paths: ['secRoot', 'secInternal', 'secLeaf', 'pkRoot', 'pkInternal', 'pkLeaf'],
+        additionalExamples: [
+          'SELECT * FROM customer WHERE email = \'MARY.SMITH@sakilacustomer.org\';',
+          'SELECT f.* FROM film f JOIN film_category fc ON f.film_id = fc.film_id WHERE fc.category_id = 5;',
+          'SELECT * FROM address WHERE district = \'California\';',
+          'SELECT * FROM film WHERE rating = \'PG-13\' AND special_features LIKE \'%Behind the Scenes%\';'
+        ]
+      },
+      covering: {
+        title: '커버링 인덱스 스캔 (Covering Index)',
+        description: '쿼리에서 필요한 모든 컬럼이 인덱스에 포함되어 있을 때, 데이터 페이지에 접근하지 않고 인덱스만으로 결과를 반환합니다.',
+        complexity: 'O(log N + M) (데이터 페이지 접근 비용 제거)',
+        example: 'SELECT first_name, last_name FROM actor WHERE last_name = \'WILLIAMS\';',
+        paths: ['root', 'internal', 'leaf'],
+        additionalExamples: [
+          'SELECT film_id, title FROM film WHERE title LIKE \'A%\'; /* (title, film_id) 인덱스 존재 */',
+          'SELECT customer_id, rental_id FROM rental WHERE return_date IS NULL;',
+          'SELECT payment_id, amount FROM payment WHERE amount > 10.00;',
+          'SELECT category_id, COUNT(*) FROM film_category GROUP BY category_id; /* category_id에 인덱스 존재 */'
+        ]
+      },
+      skip: {
+        title: '인덱스 스킵 스캔 (Index Skip Scan)',
+        description: '복합 인덱스에서 첫 번째 컬럼 없이 두 번째 이후 컬럼으로 조건을 지정할 때, 첫 번째 컬럼의 고유한 값들을 식별하고 각각에 대해 인덱스 탐색을 수행합니다.',
+        complexity: 'O(K * log N + M) (K: 첫 번째 컬럼의 고유 값 수)',
+        example: 'SELECT * FROM actor WHERE last_name = \'WILLIAMS\'; /* (first_name, last_name) 인덱스 사용 */',
+        paths: ['skipRoot', 'skipGroups'],
+        additionalExamples: [
+          'SELECT * FROM staff WHERE last_name = \'STEPHENS\'; /* (first_name, last_name) 인덱스 존재 */',
+          'SELECT * FROM address WHERE city_id = 5; /* (address, city_id) 인덱스 존재 */',
+          'SELECT * FROM film_actor WHERE film_id = 50; /* (actor_id, film_id) 복합 인덱스 존재 */',
+          'SELECT * FROM payment WHERE staff_id = 1; /* (customer_id, staff_id, payment_date) 인덱스 존재 */'
+        ]
+      },
+      loose: {
+        title: '루스 인덱스 스캔 (Loose Index Scan)',
+        description: 'GROUP BY나 집계 함수 처리 시 인덱스를 활용하여 필요한 그룹 키 값만 읽는 방식입니다. 그룹에 필요한 고유 값만 스캔하여 효율적입니다.',
+        complexity: 'O(log N + K) (K: 그룹 수)',
+        example: 'SELECT actor_id, COUNT(*) FROM film_actor GROUP BY actor_id;',
+        paths: ['looseRoot', 'looseLeaf'],
+        additionalExamples: [
+          'SELECT country_id, MAX(city) FROM city GROUP BY country_id;',
+          'SELECT store_id, COUNT(*) FROM customer GROUP BY store_id;',
+          'SELECT DISTINCT category_id FROM film_category;',
+          'SELECT rating, AVG(length) FROM film GROUP BY rating;'
+        ]
+      },
+      index: {
+        title: 'Index Full Scan',
+        description: '인덱스의 첫 번째 리프 노드부터 시작하여 모든 리프 노드를 순차적으로 스캔합니다. 정렬이 필요한 쿼리에 효과적입니다.',
+        complexity: 'O(N) (N: 인덱스 엔트리 수)',
+        example: 'SELECT film_id FROM film ORDER BY film_id;',
+        paths: ['firstLeaf', 'leafScan'],
+        additionalExamples: [
+          'SELECT customer_id FROM customer ORDER BY last_name, first_name;',
+          'SELECT payment_id, amount FROM payment ORDER BY payment_date;',
+          'SELECT actor_id FROM actor WHERE actor_id > 0;',
+          'SELECT COUNT(*) FROM rental; /* rental_id에 인덱스 존재 */'
+        ]
+      },
+      full: {
+        title: 'Full Table Scan',
+        description: '인덱스를 사용하지 않고 테이블의 모든 데이터 페이지를 순차적으로 스캔합니다. 인덱스를 사용할 수 없는 조건에서 수행됩니다.',
+        complexity: 'O(N) (N: 테이블 행 수)',
+        example: 'SELECT * FROM actor WHERE last_update > \'2006-02-15\';',
+        paths: ['dataFull'],
+        additionalExamples: [
+          'SELECT * FROM film WHERE special_features LIKE \'%Deleted Scenes%\';',
+          'SELECT * FROM customer WHERE CONCAT(first_name, \' \', last_name) = \'MARY SMITH\';',
+          'SELECT * FROM film WHERE length > rental_duration * 30;',
+          'SELECT * FROM payment WHERE amount < 1.00 OR amount > 10.00;'
+        ]
+      }
+    };
+
+    // 트리 노드 HTML 생성 함수
+    function createTreeNode(label, type, isHighlighted, extraStyle = '') {
+      let nodeClass = 'node';
+
+      switch (type) {
+        case 'root': nodeClass += ' root-node'; break;
+        case 'internal': nodeClass += ' internal-node'; break;
+        case 'leaf': nodeClass += ' leaf-node'; break;
+        case 'data': nodeClass += ' data-page'; break;
+      }
+
+      if (isHighlighted) {
+        nodeClass += ' highlighted-node scan-path';
+      }
+
+      return `<div class="${nodeClass}" style="${extraStyle}" role="img" aria-label="${type} ${label} ${isHighlighted ? '(현재 스캔 경로)' : ''}">${label}</div>`;
+    }
+
+    // 레전드 HTML 생성
+    function createLegend() {
+      return `
+        <div class="legend" role="group" aria-label="B+Tree 노드 유형 범례">
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #ffcccc;" role="img" aria-label="루트 노드 색상"></div>
+            <span>루트 노드</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #ffffcc;" role="img" aria-label="내부 노드 색상"></div>
+            <span>내부 노드</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #ccffcc;" role="img" aria-label="리프 노드 색상"></div>
+            <span>리프 노드</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #ccccff;" role="img" aria-label="데이터 페이지 색상"></div>
+            <span>데이터 페이지</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="border: 2px solid #ff6347; box-shadow: 0 0 4px rgba(255, 99, 71, 0.6)" role="img" aria-label="스캔 경로 색상"></div>
+            <span>스캔 경로</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // B+Tree 렌더링 함수
+    function renderBPlusTree(scanType) {
+      // Const 스캔 및 기본 클러스터드 인덱스 B+Tree
+      if (['const', 'range', 'covering', 'index'].includes(scanType)) {
+        let html = '<div class="tree-container" role="region" aria-label="B+Tree 인덱스 시각화">';
+
+        // 루트 노드
+        html += `
+          <div class="row">
+            ${createTreeNode(
+          '루트 노드<br>[25, 75]',
+          'root',
+          ['const', 'range', 'covering'].includes(scanType)
+        )}
+          </div>
+        `;
+
+        // 내부 노드
+        html += `
+          <div class="row">
+            <div class="node-container">
+              ${createTreeNode(
+          '내부 노드<br>[10, 20, 40]',
+          'internal',
+          ['const', 'range', 'covering'].includes(scanType)
+        )}
+              ${createTreeNode(
+          '내부 노드<br>[60, 80, 90]',
+          'internal',
+          false
+        )}
+            </div>
+          </div>
+        `;
+
+        // 리프 노드
+        html += `
+          <div class="row">
+            <div class="node-container">
+              ${createTreeNode('리프 노드<br>[1-9]', 'leaf', scanType === 'index')}
+              ${createTreeNode('리프 노드<br>[10-19]', 'leaf', scanType === 'index')}
+              ${createTreeNode('리프 노드<br>[20-24]', 'leaf', scanType === 'range' || scanType === 'index')}
+              ${createTreeNode('리프 노드<br>[25-39]', 'leaf', ['const', 'range', 'covering', 'index'].includes(scanType))}
+              ${createTreeNode('리프 노드<br>[40-59]', 'leaf', scanType === 'index')}
+              ${createTreeNode('리프 노드<br>[60-99]', 'leaf', scanType === 'index')}
+            </div>
+          </div>
+        `;
+
+        // 화살표 아이콘 - 리프 노드 간 연결 (B+Tree 특징)
+        if (scanType === 'range' || scanType === 'index') {
+          html += `
+            <div class="row">
+              <div class="node-container" style="justify-content: center; padding: 0 20px;">
+          `;
+
+          for (let i = 0; i < 5; i++) {
+            const isHighlighted = (scanType === 'range' && i >= 2 && i <= 3) || scanType === 'index';
+            const arrowColor = isHighlighted ? '#ff6347' : '#999';
+
+            html += `
+              <div style="display: flex; align-items: center; width: 120px; justify-content: center;">
+                <div style="width: 40px; height: 2px; background-color: ${arrowColor};" role="presentation"></div>
+                <div style="font-size: 20px; color: ${arrowColor};" role="img" aria-label="연결 화살표">→</div>
+              </div>
+            `;
+          }
+
+          html += `
+              </div>
+            </div>
+          `;
+        }
+
+        // 데이터 페이지 (const, range 스캔의 경우)
+        if (['const', 'range'].includes(scanType)) {
+          html += `
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('데이터 페이지<br>[1-9]', 'data', false)}
+                ${createTreeNode('데이터 페이지<br>[10-19]', 'data', false)}
+                ${createTreeNode('데이터 페이지<br>[20-24]', 'data', scanType === 'range')}
+                ${createTreeNode('데이터 페이지<br>[25-39]', 'data', ['const', 'range'].includes(scanType))}
+                ${createTreeNode('데이터 페이지<br>[40-59]', 'data', false)}
+                ${createTreeNode('데이터 페이지<br>[60-99]', 'data', false)}
+              </div>
+            </div>
+          `;
+        }
+
+        // 커버링 인덱스 스캔 특별 메시지
+        if (scanType === 'covering') {
+          html += `
+            <div style="padding: 10px 20px; background-color: #d4edda; border-radius: 5px; border: 1px solid #c3e6cb; margin-top: 20px; text-align: center; font-weight: bold;" role="note" aria-label="커버링 인덱스 특징">
+              세컨더리 인덱스만으로 결과 반환 (데이터 페이지 접근 없음)
+            </div>
+          `;
+        }
+
+        html += '</div>';
+        return html;
+      }
+
+      // 세컨더리 인덱스 스캔
+      else if (scanType === 'secondary') {
+        return `
+          <div class="tree-container" role="region" aria-label="세컨더리 인덱스 스캔 시각화">
+            <!-- 세컨더리 인덱스 부분 -->
+            <div class="secondary-index-container">
+              <h4 style="text-align: center; margin: 0 0 15px 0;">세컨더리 인덱스 (title)</h4>
+              <div class="row">
+                ${createTreeNode('루트 노드<br>[M, T]', 'root', true)}
+              </div>
+              
+              <div class="row">
+                ${createTreeNode('내부 노드<br>[A-L]', 'internal', true)}
+              </div>
+              
+              <div class="row">
+                ${createTreeNode('리프 노드<br>[\'ACADEMY DINOSAUR\', film_id=1]', 'leaf', true, 'width: 300px;')}
+              </div>
+            </div>
+            
+            <!-- 화살표 아이콘 - 세컨더리에서 클러스터드로 -->
+            <div style="display: flex; justify-content: center; margin: 20px 0; font-size: 24px; color: #ff6347; font-weight: bold;" role="img" aria-label="PK 값으로 클러스터드 인덱스 조회">
+              ↓ film_id=1 값으로 클러스터드 인덱스 조회
+            </div>
+            
+            <!-- 클러스터드 인덱스 부분 -->
+            <div style="border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+              <h4 style="text-align: center; margin: 0 0 15px 0;">클러스터드 인덱스 (film_id)</h4>
+              <div class="row">
+                ${createTreeNode('루트 노드<br>[25, 75]', 'root', true)}
+              </div>
+              
+              <div class="row">
+                ${createTreeNode('내부 노드<br>[10, 20, 40]', 'internal', true)}
+              </div>
+              
+              <div class="row">
+                ${createTreeNode('리프 노드 = 데이터 페이지<br>[film_id=1 전체 데이터]', 'leaf', true, 'width: 300px;')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // 인덱스 스킵 스캔
+      else if (scanType === 'skip') {
+        return `
+          <div class="tree-container" role="region" aria-label="인덱스 스킵 스캔 시각화">
+            <div style="text-align: center; margin-bottom: 20px; font-size: 16px;">
+              복합 인덱스 (first_name, last_name)에서 first_name 값들을 스킵하며 특정 last_name='WILLIAMS'를 찾음
+            </div>
+            
+            <div class="row">
+              ${createTreeNode('루트 노드', 'root', true)}
+            </div>
+            
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('내부 노드', 'internal', true)}
+              </div>
+            </div>
+            
+            <div style="margin: 15px 0; text-align: center; font-weight: bold; color: #ff6347;">
+              ↓ 첫번째 컬럼(first_name)의 고유 값들 식별 ↓
+            </div>
+            
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('first_name=\'A\'', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('first_name=\'B\'', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('first_name=\'C\'', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('..', 'leaf', true, 'width: 50px;')}
+              </div>
+            </div>
+            
+            <div style="margin: 15px 0; text-align: center; font-weight: bold; color: #ff6347;">
+              ↓ 각 고유 first_name 값에 대해 last_name='WILLIAMS' 조건으로 검색 ↓
+            </div>
+            
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('(A, WILLIAMS)', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('(B, WILLIAMS)', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('(C, WILLIAMS)', 'leaf', true, 'width: 140px;')}
+                ${createTreeNode('..', 'leaf', true, 'width: 50px;')}
+              </div>
+            </div>
+            
+            <div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; border: 1px solid #ffeeba; margin-top: 20px;">
+              <strong>최적화 원리:</strong> MySQL이 복합 인덱스의 첫 번째 컬럼 없이도 두 번째 이후 컬럼으로 검색할 수 있게 해줍니다. 
+              옵티마이저는 첫 번째 컬럼의 모든 고유 값을 식별하고, 각각에 대해 두 번째 컬럼 조건으로 검색합니다.
+            </div>
+          </div>
+        `;
+      }
+
+      // 루스 인덱스 스캔
+      else if (scanType === 'loose') {
+        return `
+          <div class="tree-container" role="region" aria-label="루스 인덱스 스캔 시각화">
+            <div style="text-align: center; margin-bottom: 20px; font-size: 16px;">
+              GROUP BY나 집계 함수를 사용할 때 인덱스에서 필요한 그룹 키 값만 선택적으로 읽음
+            </div>
+            
+            <div class="row">
+              ${createTreeNode('루트 노드', 'root', true)}
+            </div>
+            
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('내부 노드', 'internal', true)}
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="node-container" style="position: relative;">
+                ${createTreeNode('리프 노드', 'leaf', false)}
+                ${createTreeNode('리프 노드', 'leaf', false)}
+                ${createTreeNode('리프 노드', 'leaf', false)}
+                ${createTreeNode('리프 노드', 'leaf', false)}
+                ${createTreeNode('리프 노드', 'leaf', false)}
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="node-container" style="position: relative;">
+                <div style="position: absolute; top: -20px; left: 0; width: 100%; display: flex; justify-content: space-around;">
+                  <div style="color: #ff6347; font-size: 24px;">↓</div>
+                  <div style="color: #ff6347; font-size: 24px;"></div>
+                  <div style="color: #ff6347; font-size: 24px;">↓</div>
+                  <div style="color: #ff6347; font-size: 24px;"></div>
+                  <div style="color: #ff6347; font-size: 24px;">↓</div>
+                </div>
+                ${createTreeNode('GROUP=1', 'leaf', true)}
+                ${createTreeNode('...', 'leaf', false, 'background-color: #f8f9fa; border: none; box-shadow: none;')}
+                ${createTreeNode('GROUP=2', 'leaf', true)}
+                ${createTreeNode('...', 'leaf', false, 'background-color: #f8f9fa; border: none; box-shadow: none;')}
+                ${createTreeNode('GROUP=3', 'leaf', true)}
+              </div>
+            </div>
+            
+            <div style="padding: 15px; background-color: #d1ecf1; border-radius: 5px; border: 1px solid #bee5eb; margin-top: 20px;">
+              <strong>최적화 원리:</strong> 집계나 그룹화 작업에서 모든 인덱스를 읽는 것이 아니라, 각 그룹에 대한 대표 값만 읽습니다.
+              그룹화에 필요한 최소한의 인덱스 엔트리만 접근하므로 성능이 크게 향상됩니다.
+            </div>
+          </div>
+        `;
+      }
+
+      // Full Table Scan
+      else if (scanType === 'full') {
+        return `
+          <div class="tree-container" role="region" aria-label="전체 테이블 스캔 시각화">
+            <div style="text-align: center; margin-bottom: 20px; font-size: 16px;">
+              인덱스를 사용하지 않고 모든 데이터 페이지를 순차적으로 스캔
+            </div>
+            
+            <div class="row">
+              <div class="node-container">
+                ${createTreeNode('데이터 페이지 1', 'data', true)}
+                <div style="font-size: 24px; margin: 0 10px; color: #ff6347;" role="img" aria-label="연결 화살표">→</div>
+                ${createTreeNode('데이터 페이지 2', 'data', true)}
+                <div style="font-size: 24px; margin: 0 10px; color: #ff6347;" role="img" aria-label="연결 화살표">→</div>
+                ${createTreeNode('데이터 페이지 3', 'data', true)}
+                <div style="font-size: 24px; margin: 0 10px; color: #ff6347;" role="img" aria-label="연결 화살표">→</div>
+                ${createTreeNode('...', 'data', true)}
+                <div style="font-size: 24px; margin: 0 10px; color: #ff6347;" role="img" aria-label="연결 화살표">→</div>
+                ${createTreeNode('데이터 페이지 N', 'data', true)}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // 인덱스 스캔 시각화 애플리케이션 렌더링
+    function renderApp() {
+      const selectedScanType = window.currentScanType || 'const';
+
+      const buttonHtml = Object.keys(scanTypes).map(type => {
+        const buttonClass = `button ${selectedScanType === type ? 'active-button' : 'inactive-button'}`;
+        return `<button class="${buttonClass}" onclick="selectScanType('${type}')" aria-pressed="${selectedScanType === type}" aria-label="${scanTypes[type].title}">${scanTypes[type].title}</button>`;
+      }).join('');
+
+      const currentScanInfo = scanTypes[selectedScanType];
+
+      const appHtml = `
+        <div class="container">
+          <div class="header">
+            <h1>MySQL InnoDB B+Tree 인덱스 스캔 시각화</h1>
+            <p>인덱스 스캔 유형을 선택하여 B+Tree 알고리즘에서의 동작 방식을 확인하세요.</p>
+          </div>
+          
+          ${createLegend()}
+          
+          <div class="button-container" role="toolbar" aria-label="인덱스 스캔 유형 선택">
+            ${buttonHtml}
+          </div>
+          
+          <div class="visualization-container">
+            <h2>${currentScanInfo.title}</h2>
+            <p>${currentScanInfo.description}</p>
+            
+            <div class="query-example">
+              <strong>쿼리 예시:</strong> ${currentScanInfo.example}
+              <button class="toggle-examples-btn" id="toggleExamplesBtn" onclick="toggleAdditionalExamples()">추가 예시 보기 ▼</button>
+              <div class="additional-examples" id="additionalExamples" style="display: none;">
+                <ul>
+                  ${currentScanInfo.additionalExamples.map(ex => `<li>${ex}</li>`).join('')}
+                </ul>
+              </div>
+            </div>
+            
+            <div class="complexity-badge">
+              시간 복잡도: ${currentScanInfo.complexity}
+            </div>
+            
+            ${renderBPlusTree(selectedScanType)}
+          </div>
+          
+          <div class="info-panel">
+            <h2>B+Tree 인덱스의 주요 특징</h2>
+            <ul>
+              <li><strong>균형 트리 구조:</strong> 모든 리프 노드가 같은 깊이에 있어 일정한 검색 성능 보장</li>
+              <li><strong>리프 노드 연결:</strong> 리프 노드들은 서로 연결되어 있어 범위 스캔에 효율적</li>
+              <li><strong>노드 분할:</strong> B+Tree는 데이터 쓰기 시 노드가 가득 차면 분할되어 자동으로 균형을 유지</li>
+              <li><strong>클러스터링:</strong> InnoDB에서 PK 인덱스는 클러스터드 인덱스로 리프 노드가 직접 데이터를 포함</li>
+              <li><strong>세컨더리 인덱스:</strong> PK가 아닌 인덱스는 리프 노드에 인덱스 키와 해당 레코드의 PK 값 저장</li>
+            </ul>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('app').innerHTML = appHtml;
+    }
+
+    // 스캔 유형 선택 함수
+    function selectScanType(scanType) {
+      window.currentScanType = scanType;
+      renderApp();
+    }
+
+    // 초기 렌더링
+    window.currentScanType = 'const';
+
+    // 페이지 로드 시 렌더링
+    document.addEventListener('DOMContentLoaded', function () {
+      renderApp();
+
+      // 구글 애널리틱스나 다른 분석도구 연결을 위한 자리 (선택적)
+      // analytics code can be inserted here
+    });
+
+    // URL 파라미터로 스캔 타입 설정 가능하게
+    function getUrlParameter(name) {
+      name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+      var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+      var results = regex.exec(location.search);
+      return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+    }
+
+    // 추가 예시 토글 함수
+    function toggleAdditionalExamples() {
+      const examplesDiv = document.getElementById('additionalExamples');
+      const toggleBtn = document.getElementById('toggleExamplesBtn');
+
+      if (examplesDiv.style.display === 'none') {
+        examplesDiv.style.display = 'block';
+        toggleBtn.innerHTML = '추가 예시 숨기기 ▲';
+      } else {
+        examplesDiv.style.display = 'none';
+        toggleBtn.innerHTML = '추가 예시 보기 ▼';
+      }
+    }
+
+    // URL에서 scan 파라미터를 확인
+    var scanParam = getUrlParameter('scan');
+    if (scanParam && Object.keys(scanTypes).includes(scanParam)) {
+      window.currentScanType = scanParam;
+      renderApp();
+    }
+  </script>
+  <!-- GitHub 리포지토리 링크 추가 -->
+  <footer style="text-align: center; margin-top: 50px; padding: 20px; border-top: 1px solid #eee; font-size: 14px;">
+    <p>© 2025 DB Advanced Course. <a href="https://github.com/sons-wook/dbAdvanced" target="_blank"
+        rel="noopener noreferrer">GitHub 리포지토리</a></p>
+  </footer>
+</body>
+
+</html>

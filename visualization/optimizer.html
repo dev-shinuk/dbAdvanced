@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MySQL 옵티마이저의 내부 동작 순서를 시각적으로 설명합니다.">
+    <title>MySQL 옵티마이저 내부 동작 순서</title>
+    <!-- Font Awesome 아이콘 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #0074d1;
+            --primary-light: #e3f2fd;
+            --green-color: #4caf50;
+            --orange-color: #ff9800;
+            --red-color: #e91e63;
+            --purple-color: #9c27b0;
+            --dark-text: #333;
+            --light-text: #555;
+            --background: #f0f2f5;
+            --card-bg: white;
+            --border-color: #e0e0e0;
+            --hover-color: #f5f5f5;
+        }
+
+        [data-theme="dark"] {
+            --primary-color: #64b5f6;
+            --primary-light: #1a2734;
+            --green-color: #81c784;
+            --orange-color: #ffb74d;
+            --red-color: #f06292;
+            --purple-color: #ce93d8;
+            --dark-text: #e0e0e0;
+            --light-text: #b0b0b0;
+            --background: #121212;
+            --card-bg: #1e1e1e;
+            --border-color: #333;
+            --hover-color: #2a2a2a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background);
+            color: var(--dark-text);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
+        }
+
+        /* 헤더 영역 */
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            position: relative;
+            padding: 1rem 0;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+
+        .theme-switch {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 50%;
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: all 0.3s ease;
+        }
+
+        /* 네비게이션 메뉴 */
+        .nav-menu {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 8px;
+            background-color: var(--primary-light);
+        }
+
+        .nav-item {
+            padding: 8px 15px;
+            border-radius: 20px;
+            background-color: var(--card-bg);
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background-color: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .nav-item i {
+            margin-right: 5px;
+        }
+
+        /* 플로우차트 스타일 */
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            margin: 40px 0;
+        }
+
+        .phase {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 25px;
+            border-left: 5px solid;
+            position: relative;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            scroll-margin-top: 20px;
+        }
+
+        .phase:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .phase-title {
+            display: flex;
+            align-items: center;
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .phase-title i {
+            margin-right: 10px;
+        }
+
+        .phase-icon {
+            background-color: var(--primary-color);
+            color: white;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            margin-right: 12px;
+            font-size: 1.2em;
+        }
+
+        .steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .steps {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .step {
+                width: auto;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+                margin: 5px 0;
+            }
+        }
+
+        .step {
+            background-color: var(--card-bg);
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 18px;
+            width: calc(33% - 20px);
+            text-align: center;
+            position: relative;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .step:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .step-number {
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+            margin-right: 8px;
+        }
+
+        .step-title {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .arrow {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin: 0 5px;
+            text-align: center;
+        }
+
+        .details {
+            margin-top: 15px;
+            font-size: 0.95em;
+            color: var(--light-text);
+        }
+
+        .sub-steps {
+            margin: 15px 0 0 15px;
+            padding-left: 20px;
+            border-left: 2px solid var(--primary-color);
+            text-align: left;
+        }
+
+        .sub-step {
+            margin: 10px 0;
+            position: relative;
+            padding-left: 25px;
+            font-size: 0.9em;
+        }
+
+        .sub-step i {
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+        }
+
+        /* 추가 콘텐츠 스타일 */
+        .optimization-phase {
+            background-color: var(--primary-light);
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            transition: all 0.3s ease;
+        }
+
+        .optimization-title {
+            display: flex;
+            align-items: center;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .optimization-title i {
+            margin-right: 10px;
+        }
+
+        .note {
+            background-color: var(--primary-light);
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+        }
+
+        .note-icon {
+            display: inline-block;
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+
+        /* SQL 예제 섹션 */
+        .sql-example {
+            background-color: var(--hover-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            position: relative;
+            overflow: hidden;
+            display: none;
+        }
+
+        .sql-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        .sql-code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: pre-wrap;
+            font-size: 0.9em;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: var(--card-bg);
+            border-left: 3px solid var(--primary-color);
+            overflow-x: auto;
+        }
+
+        /* 토글 확장 버튼 */
+        .toggle-btn {
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+            border: none;
+            border-radius: 20px;
+            padding: 8px 15px;
+            font-size: 0.9em;
+            cursor: pointer;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-btn:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .toggle-btn i {
+            margin-right: 5px;
+        }
+
+        /* 상단으로 스크롤 버튼 */
+        .scroll-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 999;
+        }
+
+        .scroll-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-top:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px 0;
+            color: var(--light-text);
+            font-size: 0.9em;
+            margin-top: 40px;
+        }
+
+        /* 퀴즈 섹션 스타일 */
+        .quiz-container {
+            padding: 10px;
+        }
+
+        .quiz-question {
+            margin-bottom: 25px;
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .quiz-question h4 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+
+        .quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .quiz-option {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-radius: 5px;
+            transition: all 0.2s ease;
+        }
+
+        .quiz-option:hover {
+            background-color: var(--hover-color);
+        }
+
+        .quiz-option input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .quiz-option label {
+            cursor: pointer;
+            font-size: 0.95em;
+        }
+
+        .correct-answer {
+            background-color: rgba(76, 175, 80, 0.2);
+            border-left: 3px solid var(--green-color);
+        }
+
+        .incorrect-answer {
+            background-color: rgba(244, 67, 54, 0.2);
+            border-left: 3px solid #f44336;
+        }
+
+        #quiz-results {
+            background-color: var(--primary-light);
+            font-weight: bold;
+        }
+
+        /* 애니메이션 효과 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .phase,
+        .step,
+        .note {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        /* 모바일 반응형 최적화 추가 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+                margin: 10px;
+                width: calc(100% - 20px);
+            }
+
+            h1 {
+                font-size: 1.6rem;
+            }
+
+            .phase-title {
+                font-size: 1.2em;
+            }
+
+            .step-title {
+                font-size: 1em;
+            }
+
+            .sub-steps {
+                margin-left: 5px;
+                padding-left: 10px;
+            }
+
+            .quiz-option {
+                padding: 10px 5px;
+            }
+        }
+
+        /* 접근성 개선 */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        :focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--primary-color);
+            color: white;
+            padding: 8px;
+            z-index: 100;
+            transition: top 0.3s;
+        }
+
+        .skip-link:focus {
+            top: 0;
+        }
+
+        /* 단계별 하이라이트 효과 */
+        .highlight-step {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+            border-color: var(--primary-color);
+            border-width: 2px;
+        }
+
+        /* 플로우차트 시각화 개선 */
+        .phase {
+            position: relative;
+            transition: all 0.4s ease;
+            border-left-width: 8px;
+        }
+
+        .active-phase {
+            transform: translateX(5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .phase::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 25px;
+            background-color: var(--border-color);
+            display: none;
+        }
+
+        .phase:not(:last-child)::before {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .step-number {
+            transition: all 0.3s ease;
+        }
+
+        .step:hover .step-number {
+            animation: pulse 1s infinite;
+        }
+
+        /* 단계 간 연결 개선 */
+        .arrow {
+            position: relative;
+            color: var(--primary-color);
+        }
+
+        .arrow::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 2px;
+            background-color: var(--primary-color);
+            z-index: -1;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="#main-content" class="skip-link">메인 콘텐츠로 건너뛰기</a>
+
+    <div class="scroll-top" id="scrollTop" aria-label="맨 위로 스크롤">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <div class="container" id="main-content">
+        <div class="header">
+            <h1>MySQL 옵티마이저 내부 동작 순서</h1>
+            <p>MySQL이 쿼리를 분석하고 실행하는 전체 프로세스를 이해해봅시다</p>
+            <div class="theme-switch" id="themeSwitch" aria-label="테마 변경">
+                <i class="fas fa-moon"></i>
+            </div>
+        </div>
+
+        <div class="nav-menu" role="navigation" aria-label="페이지 내 네비게이션">
+            <a href="#parse-phase" class="nav-item" aria-label="파싱 단계로 이동">
+                <i class="fas fa-code"></i> 파싱 단계
+            </a>
+            <a href="#prepare-phase" class="nav-item" aria-label="준비 단계로 이동">
+                <i class="fas fa-tools"></i> 준비 단계
+            </a>
+            <a href="#optimize-phase" class="nav-item" aria-label="최적화 단계로 이동">
+                <i class="fas fa-chart-line"></i> 최적화 단계
+            </a>
+            <a href="#execute-phase" class="nav-item" aria-label="실행 단계로 이동">
+                <i class="fas fa-play"></i> 실행 단계
+            </a>
+            <a href="#techniques" class="nav-item" aria-label="최적화 기법으로 이동">
+                <i class="fas fa-lightbulb"></i> 최적화 기법
+            </a>
+        </div>
+
+        <div class="flowchart">
+            <!-- Phase 1: Parse -->
+            <div id="parse-phase" class="phase" style="border-color: var(--green-color);">
+                <div class="phase-title">
+                    <div class="phase-icon" style="background-color: var(--green-color);">
+                        <i class="fas fa-code"></i>
+                    </div>
+                    1. 파싱 단계 (Parse Phase)
+                </div>
+                <div class="details">SQL 쿼리를 분석하여 내부 데이터 구조로 변환</div>
+                <div class="steps">
+                    <div class="step" id="step1">
+                        <div class="step-header">
+                            <div class="step-number">1</div>
+                            <div class="step-title">구문 분석 (Syntax)</div>
+                        </div>
+                        <div class="details">SQL 문법 검사</div>
+                        <button class="toggle-btn" aria-label="구문 분석 예제 보기" onclick="toggleExample('example1')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example1">
+                            <div class="sql-title">구문 분석 예제:</div>
+                            <div class="sql-code">SELECT * FROM customers
+                                WHERE customer_id = 123;
+
+                                -- 구문 분석 시 토큰화:
+                                -- SELECT, *, FROM, customers, WHERE, customer_id, =, 123
+
+                                -- 구문 오류 예:
+                                SELECT * FORM customers; -- FORM은 FROM의 오타</div>
+                        </div>
+                    </div>
+                    <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                    <div class="step" id="step2">
+                        <div class="step-header">
+                            <div class="step-number">2</div>
+                            <div class="step-title">의미 분석 (Semantic)</div>
+                        </div>
+                        <div class="details">테이블, 컬럼 존재 확인</div>
+                        <button class="toggle-btn" aria-label="의미 분석 예제 보기" onclick="toggleExample('example2')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example2">
+                            <div class="sql-title">의미 분석 예제:</div>
+                            <div class="sql-code">SELECT customer_name FROM customers
+                                WHERE customer_id = 123;
+
+                                -- 의미 분석 시 확인:
+                                -- 1. "customers" 테이블이 존재하는가?
+                                -- 2. "customer_name", "customer_id" 컬럼이 해당 테이블에 존재하는가?
+
+                                -- 의미 오류 예:
+                                SELECT xyz FROM customers; -- xyz 컬럼이 존재하지 않음</div>
+                        </div>
+                    </div>
+                    <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                    <div class="step" id="step3">
+                        <div class="step-header">
+                            <div class="step-number">3</div>
+                            <div class="step-title">권한 검사</div>
+                        </div>
+                        <div class="details">사용자 권한 확인</div>
+                        <button class="toggle-btn" aria-label="권한 검사 예제 보기" onclick="toggleExample('example3')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example3">
+                            <div class="sql-title">권한 검사 예제:</div>
+                            <div class="sql-code">-- 권한 확인 쿼리
+                                SHOW GRANTS FOR current_user();
+
+                                -- 테이블 권한 부여 예
+                                GRANT SELECT ON customers TO 'app_user'@'localhost';
+
+                                -- 권한 검사:
+                                -- 1. 'app_user'가 customers 테이블에 대한 SELECT 권한이 있는지 확인
+                                -- 2. 없다면 "ERROR 1142 (42000): SELECT command denied..." 오류 발생</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 2: Prepare -->
+            <div id="prepare-phase" class="phase" style="border-color: var(--orange-color);">
+                <div class="phase-title">
+                    <div class="phase-icon" style="background-color: var(--orange-color);">
+                        <i class="fas fa-tools"></i>
+                    </div>
+                    2. 준비 단계 (Prepare Phase)
+                </div>
+                <div class="details">쿼리 변환과 정규화 수행</div>
+                <div class="steps">
+                    <div class="step" id="step4">
+                        <div class="step-header">
+                            <div class="step-number">4</div>
+                            <div class="step-title">쿼리 변환</div>
+                        </div>
+                        <div class="details">
+                            <div class="sub-steps">
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 뷰 확장</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 서브쿼리 변환</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 표현식 간소화</div>
+                            </div>
+                        </div>
+                        <button class="toggle-btn" aria-label="쿼리 변환 예제 보기" onclick="toggleExample('example4')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example4">
+                            <div class="sql-title">쿼리 변환 예제:</div>
+                            <div class="sql-code">-- 원본 쿼리 (뷰 사용)
+                                SELECT * FROM customer_summary
+                                WHERE total_rentals > 10;
+
+                                -- 뷰 확장 후
+                                SELECT c.customer_id, c.first_name, c.last_name, COUNT(r.rental_id) as total_rentals
+                                FROM customer c
+                                LEFT JOIN rental r ON c.customer_id = r.customer_id
+                                GROUP BY c.customer_id, c.first_name, c.last_name
+                                HAVING COUNT(r.rental_id) > 10;
+
+                                -- 서브쿼리 변환 예
+                                -- 원본:
+                                SELECT * FROM film WHERE rating IN (SELECT rating FROM film WHERE rental_rate > 4);
+
+                                -- 변환 후:
+                                SELECT f1.* FROM film f1
+                                JOIN (SELECT DISTINCT rating FROM film WHERE rental_rate > 4) f2
+                                ON f1.rating = f2.rating;</div>
+                        </div>
+                    </div>
+                    <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                    <div class="step" id="step5">
+                        <div class="step-header">
+                            <div class="step-number">5</div>
+                            <div class="step-title">논리적 최적화</div>
+                        </div>
+                        <div class="details">
+                            <div class="sub-steps">
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 조건 푸시다운</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 조인 순서 변경</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 파티션 프루닝</div>
+                            </div>
+                        </div>
+                        <button class="toggle-btn" aria-label="논리적 최적화 예제 보기" onclick="toggleExample('example5')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example5">
+                            <div class="sql-title">논리적 최적화 예제:</div>
+                            <div class="sql-code">-- 조건 푸시다운 예
+                                -- 원본:
+                                SELECT c.first_name, c.last_name
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                WHERE r.rental_date > '2005-07-01';
+
+                                -- 최적화 후 (WHERE 조건이 먼저 적용됨):
+                                SELECT c.first_name, c.last_name
+                                FROM customer c
+                                JOIN (
+                                SELECT customer_id FROM rental
+                                WHERE rental_date > '2005-07-01'
+                                ) r ON c.customer_id = r.customer_id;
+
+                                -- 파티션 프루닝 예 (파티션 테이블)
+                                -- 특정 날짜 범위만 찾고 있다면 필요한 파티션만 검색
+                                SELECT * FROM rental_history
+                                WHERE rental_date BETWEEN '2020-01-01' AND '2020-03-31';
+                                -- 위 쿼리에서 rental_history가 월별 파티션 테이블이라면
+                                -- 1월, 2월, 3월 파티션만 검색</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 3: Optimize -->
+            <div id="optimize-phase" class="phase" style="border-color: var(--red-color);">
+                <div class="phase-title">
+                    <div class="phase-icon" style="background-color: var(--red-color);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    3. 최적화 단계 (Optimize Phase)
+                </div>
+                <div class="details">실행 계획 수립 및 최적화</div>
+
+                <div class="optimization-phase">
+                    <div class="optimization-title">
+                        <i class="fas fa-balance-scale"></i> 비용 기반 최적화 프로세스
+                    </div>
+                    <div class="steps">
+                        <div class="step" id="step6">
+                            <div class="step-header">
+                                <div class="step-number">6</div>
+                                <div class="step-title">통계 정보 수집</div>
+                            </div>
+                            <div class="details">테이블/인덱스 통계</div>
+                            <button class="toggle-btn" aria-label="통계 정보 예제 보기" onclick="toggleExample('example6')">
+                                <i class="fas fa-code"></i> 예제 보기
+                            </button>
+                            <div class="sql-example" id="example6">
+                                <div class="sql-title">테이블 통계 정보:</div>
+                                <div class="sql-code">-- 테이블 통계 정보 확인
+                                    SHOW TABLE STATUS LIKE 'customer';
+                                    ANALYZE TABLE customer;
+
+                                    -- 인덱스 통계 정보
+                                    SHOW INDEX FROM customer;
+
+                                    -- 히스토그램 생성 (MySQL 8.0+)
+                                    ANALYZE TABLE customer
+                                    UPDATE HISTOGRAM ON customer_id, store_id
+                                    WITH 64 BUCKETS;
+
+                                    -- 히스토그램 조회
+                                    SELECT * FROM
+                                    information_schema.column_statistics
+                                    WHERE table_name = 'customer';</div>
+                            </div>
+                        </div>
+                        <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                        <div class="step" id="step7">
+                            <div class="step-header">
+                                <div class="step-number">7</div>
+                                <div class="step-title">액세스 경로 결정</div>
+                            </div>
+                            <div class="details">
+                                <div class="sub-steps">
+                                    <div class="sub-step"><i class="fas fa-caret-right"></i> 테이블 스캔</div>
+                                    <div class="sub-step"><i class="fas fa-caret-right"></i> 인덱스 선택</div>
+                                    <div class="sub-step"><i class="fas fa-caret-right"></i> 조인 방법 결정</div>
+                                </div>
+                            </div>
+                            <button class="toggle-btn" aria-label="액세스 경로 예제 보기" onclick="toggleExample('example7')">
+                                <i class="fas fa-code"></i> 예제 보기
+                            </button>
+                            <div class="sql-example" id="example7">
+                                <div class="sql-title">액세스 경로 결정 예제:</div>
+                                <div class="sql-code">-- 실행 계획 확인
+                                    EXPLAIN SELECT * FROM customer
+                                    WHERE email LIKE 'mary%';
+
+                                    -- 인덱스 스캔이 선택되는 경우
+                                    EXPLAIN SELECT customer_id, email FROM customer
+                                    WHERE customer_id BETWEEN 100 AND 200;
+
+                                    -- 테이블 풀 스캔이 선택되는 경우
+                                    EXPLAIN SELECT * FROM customer
+                                    WHERE active = 1; -- active 컬럼에 인덱스가 없는 경우</div>
+                            </div>
+                        </div>
+                        <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                        <div class="step" id="step8">
+                            <div class="step-header">
+                                <div class="step-number">8</div>
+                                <div class="step-title">비용 계산</div>
+                            </div>
+                            <div class="details">각 경로의 비용 평가</div>
+                            <button class="toggle-btn" aria-label="비용 계산 예제 보기" onclick="toggleExample('example8')">
+                                <i class="fas fa-code"></i> 예제 보기
+                            </button>
+                            <div class="sql-example" id="example8">
+                                <div class="sql-title">비용 계산 예제:</div>
+                                <div class="sql-code">-- 비용 정보 포함한 실행 계획 확인
+                                    EXPLAIN FORMAT=JSON SELECT c.first_name, f.title
+                                    FROM customer c
+                                    JOIN rental r ON c.customer_id = r.customer_id
+                                    JOIN inventory i ON r.inventory_id = i.inventory_id
+                                    JOIN film f ON i.film_id = f.film_id
+                                    WHERE c.last_name LIKE 'S%';
+
+                                    -- 결과에서 "cost_info" 섹션 확인:
+                                    -- "read_cost": "8.80",
+                                    -- "eval_cost": "0.85",
+                                    -- "prefix_cost": "9.65",
+                                    -- "data_read_per_join": "448K"</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="steps">
+                    <div class="step" id="step9">
+                        <div class="step-header">
+                            <div class="step-number">9</div>
+                            <div class="step-title">조인 순서 최적화</div>
+                        </div>
+                        <div class="details">
+                            <div class="sub-steps">
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> Greedy 알고리즘</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> Dynamic Programming</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 히스토그램 사용</div>
+                            </div>
+                        </div>
+                        <button class="toggle-btn" aria-label="조인 순서 최적화 예제 보기" onclick="toggleExample('example9')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example9">
+                            <div class="sql-title">조인 순서 결정 예제:</div>
+                            <div class="sql-code">-- 3개 테이블 조인 쿼리
+                                EXPLAIN FORMAT=TREE SELECT c.first_name, f.title
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                JOIN inventory i ON r.inventory_id = i.inventory_id
+                                JOIN film f ON i.film_id = f.film_id
+                                WHERE c.active = 1;
+
+                                -- optimizer_search_depth 변수로 조인 최적화 제어
+                                SET optimizer_search_depth = 5; -- 높은 값: 더 많은 조인 순서 고려
+                                SET optimizer_prune_level = 0; -- 0: 모든 조인 순서 고려
+                                -- 1: 휴리스틱 사용하여 일부 순서 제외</div>
+                        </div>
+                    </div>
+                    <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                    <div class="step" id="step10">
+                        <div class="step-header">
+                            <div class="step-number">10</div>
+                            <div class="step-title">최종 계획 선택</div>
+                        </div>
+                        <div class="details">가장 낮은 비용의 계획</div>
+                        <button class="toggle-btn" aria-label="최종 계획 선택 예제 보기" onclick="toggleExample('example10')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example10">
+                            <div class="sql-title">최종 계획 선택 예제:</div>
+                            <div class="sql-code">-- 최종 선택된 실행 계획 확인
+                                EXPLAIN ANALYZE SELECT c.first_name, f.title
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                JOIN inventory i ON r.inventory_id = i.inventory_id
+                                JOIN film f ON i.film_id = f.film_id
+                                WHERE c.active = 1;
+
+                                -- 실행 계획 힌트로 계획 강제 지정
+                                EXPLAIN SELECT /*+ JOIN_ORDER(c, r, i, f) */
+                                c.first_name, f.title
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                JOIN inventory i ON r.inventory_id = i.inventory_id
+                                JOIN film f ON i.film_id = f.film_id
+                                WHERE c.active = 1;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 4: Execute -->
+            <div id="execute-phase" class="phase" style="border-color: var(--purple-color);">
+                <div class="phase-title">
+                    <div class="phase-icon" style="background-color: var(--purple-color);">
+                        <i class="fas fa-play"></i>
+                    </div>
+                    4. 실행 단계 (Execute Phase)
+                </div>
+                <div class="details">최종 실행 계획에 따라 쿼리 실행</div>
+                <div class="steps">
+                    <div class="step" id="step11">
+                        <div class="step-header">
+                            <div class="step-number">11</div>
+                            <div class="step-title">물리적 연산자 생성</div>
+                        </div>
+                        <div class="details">이터레이터 트리 구성</div>
+                        <button class="toggle-btn" aria-label="물리적 연산자 예제 보기" onclick="toggleExample('example11')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example11">
+                            <div class="sql-title">물리적 연산자 예제:</div>
+                            <div class="sql-code">-- 물리적 연산자를 확인하는 실행 계획
+                                EXPLAIN FORMAT=TREE SELECT c.first_name, r.rental_date
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                WHERE c.store_id = 1;
+
+                                -- 결과에서 물리적 연산자 확인:
+                                -- -> Nested loop inner join
+                                -- -> Index lookup on c using idx_store_id
+                                -- -> Filter: (r.customer_id = c.customer_id)
+                                -- -> Table scan on r
+
+                                -- 실제 실행 시간 정보 확인
+                                EXPLAIN ANALYZE SELECT c.first_name, r.rental_date
+                                FROM customer c
+                                JOIN rental r ON c.customer_id = r.customer_id
+                                WHERE c.store_id = 1;</div>
+                        </div>
+                    </div>
+                    <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                    <div class="step" id="step12">
+                        <div class="step-header">
+                            <div class="step-number">12</div>
+                            <div class="step-title">데이터 접근 실행</div>
+                        </div>
+                        <div class="details">
+                            <div class="sub-steps">
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 버퍼 풀 활용</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 디스크 I/O 최소화</div>
+                                <div class="sub-step"><i class="fas fa-caret-right"></i> 정렬 및 그룹화 실행</div>
+                            </div>
+                        </div>
+                        <button class="toggle-btn" aria-label="데이터 접근 예제 보기" onclick="toggleExample('example12')">
+                            <i class="fas fa-code"></i> 예제 보기
+                        </button>
+                        <div class="sql-example" id="example12">
+                            <div class="sql-title">데이터 접근 실행 예제:</div>
+                            <div class="sql-code">-- 버퍼 풀 상태 확인
+                                SHOW ENGINE INNODB STATUS\G SHOW ENGINE INNODB STATUS\G
+                                SHOW STATUS LIKE 'Innodb_buffer_pool%';ATUS LIKE 'Innodb_buffer_pool%';
+
+                                -- InnoDB 버퍼 풀 설정 -- InnoDB 버퍼 풀 설정
+                                SHOW VARIABLES LIKE 'innodb_buffer_pool_size'; LIKE 'innodb_buffer_pool_size';
+                                SET GLOBAL innodb_buffer_pool_size = 1073741824; -- 1GBr_pool_size = 1073741824; -- 1GB
+
+                                -- 디스크 I/O 관련 상태 변수 -- 디스크 I/O 관련 상태 변수
+                                SHOW GLOBAL STATUS LIKE 'Innodb_data_reads';STATUS LIKE 'Innodb_data_reads';
+                                SHOW GLOBAL STATUS LIKE 'Innodb_data_writes';TATUS LIKE 'Innodb_data_writes';
+
+                                -- 정렬 실행 감시 -- 정렬 실행 감시
+                                SHOW STATUS LIKE 'Sort%'; SHOW STATUS LIKE 'Sort%';
+                                SHOW VARIABLES LIKE 'sort_buffer_size';RIABLES LIKE 'sort_buffer_size';
+                                SET SESSION sort_buffer_size = 2097152; -- 2MB</div>fer_size = 2097152; -- 2MB
+                        </div>
+                    </div>
+                </div>
+                <div class="arrow"><i class="fas fa-angle-right"></i></div>
+                <div class="step" id="step13">
+                    <div class="step-header">
+                        <div class="step-number">13</div>
+                        <div class="step-title">결과 반환</div>
+                    </div>
+                    <div class="details">결과셋 처리 및 클라이언트로 전송</div>
+                    <button class="toggle-btn" aria-label="결과 반환 예제 보기" onclick="toggleExample('example13')">
+                        <i class="fas fa-code"></i> 예제 보기
+                    </button>
+                    <div class="sql-example" id="example13">
+                        <div class="sql-title">결과 반환 예제:</div>
+                        <div class="sql-code">-- 결과 제한 설정
+                            SET SESSION max_execution_time = 10000; -- 실행 시간 제한 10초on_time = 10000; -- 실행 시간 제한 10초
+                            SELECT SQL_NO_CACHE * FROM large_table; -- 캐시 사용하지 않음 FROM large_table; -- 캐시 사용하지 않음
+
+                            -- 결과 스트리밍 제어 -- 결과 스트리밍 제어
+                            SET SESSION net_buffer_length = 16384; -- 네트워크 버퍼 크기er_length = 16384; -- 네트워크 버퍼 크기
+                            SHOW STATUS LIKE 'Bytes_sent'; SHOW STATUS LIKE 'Bytes_sent';
+
+                            -- 클라이언트에 대용량 결과셋 전송 시 -- 클라이언트에 대용량 결과셋 전송 시
+                            -- 스트리밍 방식으로 처리됨 (모든 결과를 메모리에 로드하지 않음)밍 방식으로 처리됨 (모든 결과를 메모리에 로드하지 않음)
+                            SELECT /*+ MAX_EXECUTION_TIME(30000) */ *+ MAX_EXECUTION_TIME(30000) */
+                            * *
+                            FROM large_table FROM large_table
+                            LIMIT 10000;</div> LIMIT 10000;
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <div class="note">
+        <span class="note-icon"><i class="fas fa-lightbulb"></i></span>
+        <strong>참고:</strong> MySQL 8.0 이상에서는 히스토그램, 인덱스 다이브, 해시 조인 등의 개선된 최적화 기법이 추가되었습니다.
+        각 단계에서 성능에 영향을 미치는 주요 시스템 변수들은 optimizer_switch, optimizer_prune_level, optimizer_search_depth 등이 있습니다.
+        <button class="toggle-btn" style="margin-top: 10px" aria-label="최적화 변수 예제 보기"
+            onclick="toggleExample('exampleVars')">
+            <i class="fas fa-cogs"></i> 최적화 변수 예제
+        </button>
+        <div class="sql-example" id="exampleVars">
+            <div class="sql-title">중요 옵티마이저 시스템 변수:</div>
+            <div class="sql-code">-- 옵티마이저 스위치 변수 확인
+                SHOW VARIABLES LIKE 'optimizer_switch';
+
+                -- 자주 사용하는 옵티마이저 스위치 설정
+                SET optimizer_switch='index_merge=on,index_merge_union=on,
+                index_merge_sort_union=on,index_merge_intersection=on,
+                engine_condition_pushdown=on,index_condition_pushdown=on,
+                mrr=on,mrr_cost_based=on,block_nested_loop=on,
+                batched_key_access=off,materialization=on,semijoin=on,
+                loosescan=on,firstmatch=on,duplicateweedout=on,
+                subquery_materialization_cost_based=on,
+                use_index_extensions=on,condition_fanout_filter=on,
+                derived_merge=on,use_invisible_indexes=off,
+                skip_scan=on,hash_join=on';
+
+                -- 옵티마이저 검색 깊이 설정
+                SHOW VARIABLES LIKE 'optimizer_search_depth';
+                SET optimizer_search_depth = 7; -- 높을수록 더 많은 조인 순서 고려
+
+                -- 휴리스틱 가지치기 설정
+                SHOW VARIABLES LIKE 'optimizer_prune_level';
+                SET optimizer_prune_level = 0; -- 0: 가지치기 없음, 더 많은 계획 검토</div>
+        </div>
+    </div>
+
+    <div id="techniques" class="optimization-phase"
+        style="background-color: var(--primary-light); border-color: var(--primary-color);">
+        <div class="optimization-title" style="color: var(--primary-color);">
+            <i class="fas fa-lightbulb"></i> 주요 최적화 기법
+        </div>
+        <div class="steps">
+            <div class="step" style="border-color: var(--primary-color);">
+                <div class="step-header">
+                    <div class="step-title">조건 최적화</div>
+                </div>
+                <div class="details">
+                    <div class="sub-steps">
+                        <div class="sub-step"><i class="fas fa-caret-right"></i> 상수 폴딩</div>
+                        <div class="sub-step"><i class="fas fa-caret-right"></i> 조건 제거</div>
+                        <div class="sub-step"><i class="fas fa-caret-right"></i> 조건 변환</div>
+                    </div>
+                </div>
+                <button class="toggle-btn" aria-label="조건 최적화 예제 보기" onclick="toggleExample('exampleA')">
+                    <i class="fas fa-code"></i> 예제 보기
+                </button>
+                <div class="sql-example" id="exampleA">
+                    <div class="sql-title">조건 최적화 예제:</div>
+                    <div class="sql-code">-- 상수 폴딩: 표현식을 상수로 계산
+                        -- 원본: WHERE price * 1.1 > 50
+                        -- 최적화: 실제 실행 시 각 행마다 1.1을 곱하지 않고
+                        -- WHERE price > 45.45로 변환하여 실행
+
+                        -- 조건 제거: 항상 참/거짓인 조건 제거
+                        -- 원본: WHERE id > 0 AND id < 100 -- 만약 id는 항상 양수인 경우 -- 최적화: WHERE id < 100 -- 조건 변환: 최적화를 위한
+                            조건식 변환 -- 원본: WHERE col1=5 OR col1=10 OR col1=15 -- 최적화: WHERE col1 IN (5, 10, 15)</div>
+                    </div>
+                </div>
+                <div class="step" style="border-color: var(--primary-color);">
+                    <div class="step-header">
+                        <div class="step-title">조인 최적화</div>
+                    </div>
+                    <div class="details">
+                        <div class="sub-steps">
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> Nested Loop Join</div>
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> Hash Join (8.0+)</div>
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> Block Nested Loop</div>
+                        </div>
+                    </div>
+                    <button class="toggle-btn" aria-label="조인 최적화 예제 보기" onclick="toggleExample('exampleB')">
+                        <i class="fas fa-code"></i> 예제 보기
+                    </button>
+                    <div class="sql-example" id="exampleB">
+                        <div class="sql-title">조인 최적화 예제:</div>
+                        <div class="sql-code">-- Nested Loop Join: 가장 기본적인 조인 방식
+                            EXPLAIN FORMAT=TREE SELECT * FROM t1
+                            JOIN t2 ON t1.id = t2.id
+                            WHERE t1.col1 = 'value';
+                            -- 작은 결과셋에 효율적
+
+                            -- Hash Join: MySQL 8.0부터 지원
+                            EXPLAIN FORMAT=TREE SELECT * FROM t1
+                            JOIN t2 ON t1.id = t2.id
+                            WHERE t1.col1 > 100;
+                            -- 동등 조건에서 큰 테이블 조인에 효율적
+
+                            -- Block Nested Loop: 조인 버퍼 사용
+                            SHOW VARIABLES LIKE 'join_buffer_size';
+                            SET join_buffer_size = 4194304; -- 4MB
+                            -- 더 큰 조인 버퍼는 많은 행을 한 번에 처리 가능</div>
+                    </div>
+                </div>
+                <div class="step" style="border-color: var(--primary-color);">
+                    <div class="step-header">
+                        <div class="step-title">서브쿼리 최적화</div>
+                    </div>
+                    <div class="details">
+                        <div class="sub-steps">
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> Materialization</div>
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> Semi-join 변환</div>
+                            <div class="sub-step"><i class="fas fa-caret-right"></i> EXISTS 최적화</div>
+                        </div>
+                    </div>
+                    <button class="toggle-btn" aria-label="서브쿼리 최적화 예제 보기" onclick="toggleExample('exampleC')">
+                        <i class="fas fa-code"></i> 예제 보기
+                    </button>
+                    <div class="sql-example" id="exampleC">
+                        <div class="sql-title">서브쿼리 최적화 예제:</div>
+                        <div class="sql-code">-- Materialization: 서브쿼리를 임시 테이블로 변환
+                            EXPLAIN FORMAT=TREE SELECT * FROM t1
+                            WHERE t1.col1 IN (SELECT t2.col1 FROM t2);
+
+                            -- Semi-join: EXISTS 형태의 쿼리 최적화
+                            EXPLAIN FORMAT=TREE SELECT * FROM t1
+                            WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.id = t1.id);
+
+                            -- 서브쿼리를 조인으로 변환
+                            -- 원본: SELECT * FROM t1
+                            -- WHERE t1.id IN (SELECT id FROM t2 WHERE t2.val > 100)
+                            -- 변환: SELECT t1.* FROM t1
+                            -- JOIN (SELECT DISTINCT id FROM t2 WHERE t2.val > 100) t2_filtered
+                            -- ON t1.id = t2_filtered.id</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="quiz-section" class="optimization-phase"
+            style="margin-top: 40px; background-color: var(--hover-color); border-color: var(--green-color);">
+            <div class="optimization-title" style="color: var(--green-color);">
+                <i class="fas fa-question-circle"></i> MySQL 옵티마이저 퀴즈
+            </div>
+            <p>옵티마이저에 대한 이해도를 테스트해보세요!</p>
+
+            <div class="quiz-container">
+                <div class="quiz-question" id="q1">
+                    <h4>1. MySQL 8.0에서 새롭게 추가된 조인 방식은 무엇인가요?</h4>
+                    <div class="quiz-options">
+                        <div class="quiz-option">
+                            <input type="radio" name="q1" id="q1a" value="a">
+                            <label for="q1a">Nested Loop Join</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q1" id="q1b" value="b">
+                            <label for="q1b">Hash Join</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q1" id="q1c" value="c">
+                            <label for="q1c">Merge Join</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q1" id="q1d" value="d">
+                            <label for="q1d">Block Nested Loop</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quiz-question" id="q2">
+                    <h4>2. 조인 순서 최적화에서 사용하는 알고리즘이 아닌 것은?</h4>
+                    <div class="quiz-options">
+                        <div class="quiz-option">
+                            <input type="radio" name="q2" id="q2a" value="a">
+                            <label for="q2a">Greedy 알고리즘</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q2" id="q2b" value="b">
+                            <label for="q2b">Dynamic Programming</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q2" id="q2c" value="c">
+                            <label for="q2c">Tree Pruning</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q2" id="q2d" value="d">
+                            <label for="q2d">Bubble Sort</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quiz-question" id="q3">
+                    <h4>3. 다음 중 MySQL 옵티마이저의 준비 단계(Prepare Phase)에서 수행되는 작업은?</h4>
+                    <div class="quiz-options">
+                        <div class="quiz-option">
+                            <input type="radio" name="q3" id="q3a" value="a">
+                            <label for="q3a">테이블 통계 정보 수집</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q3" id="q3b" value="b">
+                            <label for="q3b">뷰 확장 및 서브쿼리 변환</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q3" id="q3c" value="c">
+                            <label for="q3c">SQL 구문 오류 확인</label>
+                        </div>
+                        <div class="quiz-option">
+                            <input type="radio" name="q3" id="q3d" value="d">
+                            <label for="q3d">최종 실행 계획 선택</label>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="check-quiz" class="toggle-btn"
+                    style="margin: 20px auto; display: block; background-color: var(--green-color); color: white;">
+                    <i class="fas fa-check-circle"></i> 정답 확인하기
+                </button>
+
+                <div id="quiz-results"
+                    style="display: none; margin-top: 20px; padding: 15px; border-radius: 8px; text-align: center;">
+                </div>
+            </div>
+        </div>
+
+        <div class="note" style="background-color: var(--background); text-align: center; margin-top: 30px;">
+            <p>MySQL 공식 문서에서 옵티마이저에 대해 더 알아보기:</p>
+            <a href="https://dev.mysql.com/doc/refman/8.0/en/optimization.html" target="_blank"
+                style="display: inline-block; padding: 10px 20px; background-color: var(--primary-color); color: white; border-radius: 5px; text-decoration: none; font-weight: bold; margin-top: 10px;">
+                <i class="fas fa-external-link-alt"></i> MySQL 옵티마이저 문서 보기
+            </a>
+        </div>
+
+        <footer>
+            <p>© 2025 MySQL 쿼리 옵티마이저 시각화 자료 | 데이터베이스 고급과정</p>
+        </footer>
+    </div>
+
+    <script>
+        // 예제 토글 기능
+        function toggleExample(id) {
+            const example = document.getElementById(id);
+            if (example.style.display === 'block') {
+                example.style.display = 'none';
+                event.target.innerHTML = '<i class="fas fa-code"></i> 예제 보기';
+            } else {
+                example.style.display = 'block';
+                event.target.innerHTML = '<i class="fas fa-times"></i> 예제 닫기';
+            }
+        }
+
+        // 다크 모드 토글
+        const themeSwitch = document.getElementById('themeSwitch');
+        themeSwitch.addEventListener('click', () => {
+            document.documentElement.setAttribute('data-theme',
+                document.documentElement.getAttribute('data-theme') === 'dark'
+                    ? 'light' : 'dark');
+
+            themeSwitch.innerHTML = document.documentElement.getAttribute('data-theme') === 'dark'
+                ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        });
+
+        // 스크롤 상단 버튼
+        const scrollTopBtn = document.getElementById('scrollTop');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                scrollTopBtn.classList.add('visible');
+            } else {
+                scrollTopBtn.classList.remove('visible');
+            }
+        });
+
+        scrollTopBtn.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // 접근성 개선: 키보드 내비게이션
+        document.addEventListener('keydown', (e) => {
+            // Alt + 숫자 키로 각 단계로 이동
+            if (e.altKey && e.key >= '1' && e.key <= '4') {
+                e.preventDefault();
+                const phases = ['parse-phase', 'prepare-phase', 'optimize-phase', 'execute-phase'];
+                const phaseIndex = parseInt(e.key) - 1;
+                if (phaseIndex >= 0 && phaseIndex < phases.length) {
+                    document.getElementById(phases[phaseIndex]).scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+
+        // 사용자 테마 설정 유지
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        themeSwitch.innerHTML = savedTheme === 'dark'
+            ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+
+        // 테마 변경 시 로컬 스토리지에 저장
+        themeSwitch.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            localStorage.setItem('theme', currentTheme);
+        });
+
+        // 단계 하이라이트 기능
+        const steps = document.querySelectorAll('.step');
+        steps.forEach(step => {
+            step.addEventListener('mouseenter', () => {
+                step.classList.add('highlight-step');
+            });
+
+            step.addEventListener('mouseleave', () => {
+                step.classList.remove('highlight-step');
+            });
+        });
+
+        // 퀴즈 기능
+        document.getElementById('check-quiz')?.addEventListener('click', checkQuizAnswers);
+
+        function checkQuizAnswers() {
+            const correctAnswers = {
+                q1: 'b', // Hash Join
+                q2: 'd', // Bubble Sort
+                q3: 'b'  // 뷰 확장 및 서브쿼리 변환
+            };
+
+            let score = 0;
+            let total = Object.keys(correctAnswers).length;
+
+            // 모든 퀴즈 문항을 순회
+            for (let qId in correctAnswers) {
+                const selectedOption = document.querySelector(`input[name="${qId}"]:checked`);
+
+                // 모든 옵션 엘리먼트 가져오기
+                const options = document.querySelectorAll(`input[name="${qId}"]`);
+                options.forEach(option => {
+                    const optionWrapper = option.parentElement;
+
+                    // 기존 상태 초기화
+                    optionWrapper.classList.remove('correct-answer', 'incorrect-answer');
+
+                    // 올바른 답변에 클래스 추가
+                    if (option.value === correctAnswers[qId]) {
+                        optionWrapper.classList.add('correct-answer');
+                    }
+
+                    // 선택했지만 틀린 답변에 클래스 추가
+                    if (selectedOption && option === selectedOption && option.value !== correctAnswers[qId]) {
+                        optionWrapper.classList.add('incorrect-answer');
+                    }
+                });
+
+                // 점수 계산
+                if (selectedOption && selectedOption.value === correctAnswers[qId]) {
+                    score++;
+                }
+            }
+
+            // 결과 표시
+            const resultsDiv = document.getElementById('quiz-results');
+            let message = '';
+
+            if (score === total) {
+                message = `<i class="fas fa-trophy" style="color: gold;"></i> 축하합니다! ${score}/${total} 문제를 맞추셨습니다. MySQL 옵티마이저에 대한 이해도가 아주 높습니다!`;
+                resultsDiv.style.backgroundColor = 'rgba(76, 175, 80, 0.2)';
+            } else if (score > 0) {
+                message = `<i class="fas fa-check-circle" style="color: var(--primary-color);"></i> ${score}/${total} 문제를 맞추셨습니다. 조금 더 공부해보세요!`;
+                resultsDiv.style.backgroundColor = 'rgba(255, 193, 7, 0.2)';
+            } else {
+                message = `<i class="fas fa-times-circle" style="color: red;"></i> 아쉽게도 모든 문제를 틀리셨습니다. 페이지를 다시 읽어보세요!`;
+                resultsDiv.style.backgroundColor = 'rgba(244, 67, 54, 0.2)';
+            }
+
+            resultsDiv.innerHTML = message;
+            resultsDiv.style.display = 'block';
+        }
+
+        // 옵티마이저 단계 시각화 (페이지 스크롤에 따른 하이라이팅)
+        window.addEventListener('scroll', () => {
+            const phases = document.querySelectorAll('.phase');
+            const windowHeight = window.innerHeight;
+
+            phases.forEach(phase => {
+                const rect = phase.getBoundingClientRect();
+
+                // 현재 화면에 보이는 단계에 클래스 추가
+                if (rect.top < windowHeight * 0.75 && rect.bottom > windowHeight * 0.25) {
+                    phase.classList.add('active-phase');
+                } else {
+                    phase.classList.remove('active-phase');
+                }
+            });
+        });
+
+        // 페이지 로딩 완료 후 실행
+        document.addEventListener('DOMContentLoaded', () => {
+            // 공통 로딩 작업
+            console.log('MySQL 옵티마이저 시각화 페이지가 로드되었습니다.');
+        });
+    </script>
+</body>
+
+</html>
